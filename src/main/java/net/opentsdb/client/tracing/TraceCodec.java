@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.JsonGenerator;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.http.HttpObject;
 import net.opentsdb.client.CallbackHandler;
 import net.opentsdb.client.json.JSONOps;
@@ -38,7 +39,10 @@ public enum TraceCodec implements Codec {
 	/** Import command encoding */
 	TEXT(new TextEncoder()),
 	/** JSON encoding */
-	JSON(new JSONEncoder());
+	JSON(new JSONEncoder()),
+	/** JSON text encoding */
+	JSONTEXT(new JSONTextEncoder());
+	
 	
 	private TraceCodec(final Codec encoder) {
 		this.encoder = encoder;
@@ -248,14 +252,18 @@ public enum TraceCodec implements Codec {
 				}
 				@Override
 				public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-					callbackHandler.onResponse(msg.toString());
+					if(msg instanceof DatagramPacket) {
+						callbackHandler.onResponse((DatagramPacket)msg);
+					} else {
+						callbackHandler.onResponse(msg.toString());
+					}					
 				}
 			};
 		}
 		
 		@Override
 		public void header(final OutputStream out) {
-			write(out, "putbatch", false);
+			write(out, "PUTBATCH --send-response", false);
 			writeEOL(out);
 		}
 		
@@ -335,7 +343,108 @@ public enum TraceCodec implements Codec {
 		}
 	}
 	
-	
+	public static class JSONTextEncoder extends BaseEncoder {
+
+		@SuppressWarnings("unchecked")
+		@Override
+		public SimpleChannelInboundHandler<String> outboundHandler(final CallbackHandler callbackHandler) {			
+			return new SimpleChannelInboundHandler<String>() {
+				@Override
+				protected void channelRead0(final ChannelHandlerContext ctx, final String msg) throws Exception {
+					callbackHandler.onResponse(msg);
+				}
+				@Override
+				public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+					callbackHandler.onResponse(msg.toString());
+				}
+			};
+		}
+		
+		@Override
+		public void header(final OutputStream out) {
+			write(out, "putbatchjson", false);
+			writeEOL(out);
+			try {
+				JSONOps.generatorFor(out).writeStartArray();
+			} catch (Exception ex) {
+				throw new RuntimeException("Failed to write json to output stream", ex);
+			}			
+		}
+		
+		/**
+		 * {@inheritDoc}
+		 * @see net.opentsdb.client.tracing.Codec#tailer(java.io.OutputStream)
+		 */
+		@Override
+		public void tailer(final OutputStream out) {
+			final JsonGenerator jgen = JSONOps.generatorFor(out);
+			try {
+				jgen.writeEndArray();
+				jgen.flush();
+				jgen.close();
+			} catch (Exception ex) {
+				throw new RuntimeException("Failed to write json to output stream", ex);
+			}
+		}
+
+
+		
+		/**
+		 * {@inheritDoc}
+		 * @see net.opentsdb.client.tracing.TraceCodec.BaseEncoder#doEncode(java.io.OutputStream, long, java.lang.String, long, java.util.Map)
+		 */
+		@Override
+		protected void doEncode(final OutputStream out, final long time, final String metric, final long value, final Map<String, String> tags) {
+			final JsonGenerator jgen = JSONOps.generatorFor(out);
+			try {
+				jgen.writeStartObject();
+				jgen.writeStringField("metric", metric.trim());
+				jgen.writeNumberField("timestamp", time);
+				jgen.writeNumberField("value", value);
+				jgen.writeFieldName("tags");
+				jgen.writeStartObject();
+				for(Map.Entry<String, String> entry: tags.entrySet()) {
+					jgen.writeStringField(entry.getKey().trim(), entry.getValue().trim());
+				}
+				jgen.writeEndObject();
+				jgen.writeEndObject();
+				jgen.flush();
+			} catch (Exception ex) {
+				throw new RuntimeException("Failed to write json to output stream", ex);
+			}
+		}
+		
+		/**
+		 * {@inheritDoc}
+		 * @see net.opentsdb.client.tracing.TraceCodec.BaseEncoder#doEncode(java.io.OutputStream, long, java.lang.String, double, java.util.Map)
+		 */
+		@Override
+		protected void doEncode(final OutputStream out, final long time, final String metric, final double value, final Map<String, String> tags) {
+			final JsonGenerator jgen = JSONOps.generatorFor(out);
+			try {
+				jgen.writeStartObject();
+				jgen.writeStringField("metric", metric.trim());
+				jgen.writeNumberField("timestamp", time);
+				jgen.writeNumberField("value", value);
+				jgen.writeFieldName("tags");
+				jgen.writeStartObject();
+				for(Map.Entry<String, String> entry: tags.entrySet()) {
+					jgen.writeStringField(entry.getKey().trim(), entry.getValue().trim());
+				}
+				jgen.writeEndObject();
+				jgen.writeEndObject();
+				jgen.flush();
+			} catch (Exception ex) {
+				throw new RuntimeException("Failed to write json to output stream", ex);
+			}			
+		}
+
+		
+
+		
+		
+		
+	}
 	/**
 	 * <p>Title: TelnetEncoder</p>
 	 * <p>Description: Telnet put command data point encoder.</p>

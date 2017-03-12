@@ -34,7 +34,7 @@ public interface Tracer {
      * @param value The value
      * @param tags The metric tags
      */
-    public void trace(long time, String metric, long value, Map<String, String> tags);
+    public void trace(long time, Object metric, long value, Map<Object, Object> tags);
 
     /**
      * Formats and sends the specified datapoint to OpenTSDB
@@ -43,7 +43,7 @@ public interface Tracer {
      * @param value The value
      * @param tags The metric tags
      */
-    public void trace(long time, String metric, double value, Map<String, String> tags);
+    public void trace(long time, Object metric, double value, Map<Object, Object> tags);
     
     /**
      * Formats and sends the specified datapoint to OpenTSDB using the current timestamp
@@ -51,7 +51,7 @@ public interface Tracer {
      * @param value The value
      * @param tags The metric tags
      */
-    public void trace(String metric, long value, Map<String, String> tags);
+    public void trace(Object metric, long value, Map<Object, Object> tags);
 
     /**
      * Formats and sends the specified datapoint to OpenTSDB using the current timestamp
@@ -59,7 +59,14 @@ public interface Tracer {
      * @param value The value
      * @param tags The metric tags
      */
-    public void trace(String metric, double value, Map<String, String> tags);
+    public void trace(Object metric, double value, Map<Object, Object> tags);
+    
+    /**
+     * <p>Parses and traces a full <code>put</code> measurement. e.g.</p>
+     * <p><b><code>tsd.jvm.thread.pool.block.count 1489082980 0 host=HeliosLeopard name=TCP-EpollBoss</code></b></p>
+     * @param fullMetric
+     */
+    public void trace(String fullMetric);
     
     /**
      * Flushes the accumulated metrics

@@ -39,21 +39,25 @@ public class SpinLock {
 	/**
 	 * Acquires this lock for the calling thread.
 	 * @param barge true for a high priority acquire, false for normal
+	 * @return true if lock was already locked by the calling thread, false otherwise
 	 */
-	public void lock(final boolean barge) {
+	public boolean lock(final boolean barge) {
 		final long id = Thread.currentThread().getId();
 		if(lock.get()!=id) {
 			while(lock.compareAndSet(UNLOCKED, id)) {
 				if(!barge) Thread.yield();
 			}
+			return false;
 		}
+		return true;
 	}
 	
 	/**
 	 * Acquires this lock for the calling thread using normal priority.
+	 * @return true if lock was already locked by the calling thread, false otherwise
 	 */
-	public void lock() {
-		lock(false);
+	public boolean lock() {
+		return lock(false);
 	}
 	
 	
@@ -72,15 +76,16 @@ public class SpinLock {
 	 */
 	public <T> T doInLock(final boolean barge, final Callable<T> task) {
 		if(task==null) throw new IllegalArgumentException("The passed task was null");
+		boolean alreadyLocked = true;
 		try {
-			lock(barge);
+			alreadyLocked = lock(barge);
 			try {
 				return task.call();
 			} catch (Exception ex) {
 				throw new RuntimeException("doInLock task failed", ex);
 			}
 		} finally {
-			unlock();
+			if(!alreadyLocked) unlock();
 		}
 	}
 	
@@ -100,15 +105,16 @@ public class SpinLock {
 	 */
 	public void doInLock(final boolean barge, final Runnable task) {
 		if(task==null) throw new IllegalArgumentException("The passed task was null");
+		boolean alreadyLocked = true;
 		try {
-			lock(barge);
+			alreadyLocked = lock(barge);
 			try {
 				task.run();
 			} catch (Exception ex) {
 				throw new RuntimeException("doInLock runnable task failed", ex);
 			}
 		} finally {
-			unlock();
+			if(!alreadyLocked) unlock();
 		}
 	}
 	

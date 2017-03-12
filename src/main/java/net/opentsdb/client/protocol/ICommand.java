@@ -12,21 +12,27 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.client.protocol;
 
-import net.opentsdb.client.ClientConfiguration;
+import java.nio.charset.Charset;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
- * <p>Title: UnixClient</p>
- * <p>Description: Unix socket client</p> 
+ * <p>Title: ICommand</p>
+ * <p>Description: </p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>net.opentsdb.client.protocol.UnixClient</code></p>
+ * <p><code>net.opentsdb.client.protocol.ICommand</code></p>
  */
 
-public class UnixClient extends BaseClient<UnixClient> {
-
-	public UnixClient(final ClientConfiguration clientConfiguration) {
-		super(clientConfiguration);		
-	}
-
+public interface ICommand {
+	/** The UTF8 character set */
+	public static final Charset UTF8 = Charset.forName("UTF8");
+	/** Empty String Set const */
+	static final Set<String> EMPTY_SET = Collections.unmodifiableSet(new HashSet<String>(0));
+	/** Empty String Map const */
+	static final Map<String, String> EMPTY_MAP = Collections.unmodifiableMap(new HashMap<String, String>(0));
 
 }

@@ -16,6 +16,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URL;
+import java.util.HashMap;
 import java.util.concurrent.Callable;
 
 import com.fasterxml.jackson.core.JsonFactory;
@@ -25,11 +27,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 
 /**
  * <p>Title: JSONOps</p>
@@ -60,6 +66,15 @@ public class JSONOps {
 	
 	/** Shared JSON factory */
 	public static final JsonFactory jfactory = new JsonFactory();
+	
+	/** Type reference for common string/object maps */
+	public static final TypeReference<HashMap<String, Object>> TR_STR_OBJ_HASH_MAP = 
+	    new TypeReference<HashMap<String, Object>>() {};
+	/** Type reference for common string/string maps */
+	public static final TypeReference<HashMap<String, String>> TR_STR_STR_HASH_MAP = 
+	    new TypeReference<HashMap<String, String>>() {};
+	
+	
 	
 	static {
 		final DefaultPrettyPrinter pp = new DefaultPrettyPrinter();		
@@ -161,6 +176,46 @@ public class JSONOps {
 	}
 	
 	/**
+	 * Parses the passed stringy into a JsonNode
+	 * @param jsonStr The stringy to parse
+	 * @return the parsed JsonNode
+	 */
+	public static JsonNode parseToNode(final CharSequence jsonStr) {
+		if (jsonStr == null) throw new IllegalArgumentException("Incoming data was null");
+		final String str = jsonStr.toString().trim();
+		if (str.isEmpty()) throw new IllegalArgumentException("Incoming data was empty");
+		try {
+			return objectMapper.readTree(str);
+		} catch (JsonParseException e) {
+			throw new IllegalArgumentException(e);
+		} catch (IOException e) {
+			throw new JSONException(e);
+		}		
+	}
+	
+	/**
+	 * Parses the passed buffer into a JsonNode
+	 * @param jsonBytes The buffer to parse
+	 * @return the parsed JsonNode
+	 */
+	public static JsonNode parseToNode(final ByteBuf jsonBytes) {
+		if (jsonBytes == null) throw new IllegalArgumentException("Incoming data was null");
+		if (!jsonBytes.isReadable()) throw new IllegalArgumentException("Incoming data was empty");
+		final ByteBufInputStream bis = new ByteBufInputStream(jsonBytes); 
+		try {
+			return objectMapper.readTree(bis);
+		} catch (JsonParseException e) {
+			throw new IllegalArgumentException(e);
+		} catch (IOException e) {
+			throw new JSONException(e);
+		} finally {
+			try { bis.close(); } catch (Exception x) {/* No Op */}
+		}
+	}
+	
+		
+	
+	/**
 	 * Deserializes a JSON formatted byte array to a specific class type
 	 * @param json The byte array to deserialize
 	 * @param type A type definition for a complex object
@@ -214,8 +269,8 @@ public class JSONOps {
 	}
 	
 	/**
-	 * Deserializes a JSON formatted byte array to a specific class type
-	 * @param json The byte array to deserialize
+	 * Deserializes a JSON formatted input stream to a specific class type
+	 * @param json The input stream to deserialize from
 	 * @param type A type definition for a complex object
 	 * @return An object of the {@code pojo} type
 	 * @throws IllegalArgumentException if the data or type was null or parsing
@@ -240,8 +295,77 @@ public class JSONOps {
 	}
 	
 	/**
-	 * Deserializes a JSON formatted byte array to a specific class type
-	 * @param json The byte array to deserialize
+	 * Deserializes a JSON providing URL to a specific class type
+	 * @param url The JSON providing URL
+	 * @param type A type definition for a complex object
+	 * @return An object of the {@code pojo} type
+	 * @throws IllegalArgumentException if the data or type was null or parsing
+	 * failed
+	 * @throws JSONException if the data could not be parsed
+	 */
+	public static final <T> T parseToObject(final URL url,
+			final Class<T> type) {
+		if (url == null)
+			throw new IllegalArgumentException("URL was null");
+		if (type == null)
+			throw new IllegalArgumentException("Missing type reference");
+		try {
+			return (T)objectMapper.readValue(url, type);
+		} catch (JsonParseException e) {
+			throw new IllegalArgumentException(e);
+		} catch (JsonMappingException e) {
+			throw new IllegalArgumentException(e);
+		} catch (IOException e) {
+			throw new JSONException(e);
+		}
+	}	
+	
+	/**
+	 * Deserializes a JSON node to a specific class type
+	 * <b>Note:</b> If you get mapping exceptions you may need to provide a 
+	 * TypeReference
+	 * @param json The node to deserialize
+	 * @param pojo The class type of the object used for deserialization
+	 * @return An object of the {@code pojo} type
+	 * @throws IllegalArgumentException if the data or class was null or parsing 
+	 * failed
+	 * @throws JSONException if the data could not be parsed
+	 */
+	public static final <T> T parseToObject(final JsonNode json, final Class<T> pojo) {
+		if (json == null)
+			throw new IllegalArgumentException("Incoming data was null or empty");
+		if (pojo == null)
+			throw new IllegalArgumentException("Missing class type");
+		return objectMapper.convertValue(json, pojo);		
+	}
+	
+	/**
+	 * Deserializes a JSON formatted string to a specific class type
+	 * <b>Note:</b> If you get mapping exceptions you may need to provide a 
+	 * TypeReference
+	 * @param json The string to deserialize
+	 * @param pojo The class type of the object used for deserialization
+	 * @return An object of the {@code pojo} type
+	 * @throws IllegalArgumentException if the data or class was null or parsing 
+	 * failed
+	 * @throws JSONException if the data could not be parsed
+	 */
+	public static final <T> T parseToObject(final JsonNode json, final TypeReference<T> pojo) {
+		if (json == null)
+			throw new IllegalArgumentException("Incoming data was null or empty");
+		if (pojo == null)
+			throw new IllegalArgumentException("Missing class type");
+
+		try {
+			return objectMapper.convertValue(json, pojo);	
+		} catch (Exception e) {
+			throw new JSONException(e);
+		}
+	}	
+	
+	/**
+	 * Deserializes a JSON formatted file to a specific class type
+	 * @param json The file to deserialize from
 	 * @param type A type definition for a complex object
 	 * @return An object of the {@code pojo} type
 	 * @throws IllegalArgumentException if the data or type was null or parsing

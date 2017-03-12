@@ -317,6 +317,17 @@ public class BufferManager implements BufferManagerMBean, ByteBufAllocator {
 	}
 	
 	/**
+	 * Wraps the passed CharSequence in an unpooled ByteBuf of the default type
+	 * @param cs The CharSequence to wrap
+	 * @param charSet The character set to convert with. UTF8 is used if null.
+	 * @return the wrapping ByteBuf
+	 */
+	public ByteBuf upwrap(final CharSequence cs, final Charset charSet) {
+		return unpooledBufferAllocator.heapBuffer(cs.length()).writeBytes(cs.toString().getBytes(charSet==null ? UTF8 : charSet));
+	}
+	
+	
+	/**
 	 * Wraps the passed CharSequence in a ByteBuf of the default type using UTF8 to convert
 	 * @param cs The CharSequence to wrap
 	 * @return the wrapping ByteBuf
@@ -324,6 +335,16 @@ public class BufferManager implements BufferManagerMBean, ByteBufAllocator {
 	public ByteBuf wrap(final CharSequence cs) {
 		return wrap(cs, UTF8);
 	}
+	
+	/**
+	 * Wraps the passed CharSequence in an unpooled ByteBuf of the default type using UTF8 to convert
+	 * @param cs The CharSequence to wrap
+	 * @return the wrapping ByteBuf
+	 */
+	public ByteBuf upwrap(final CharSequence cs) {
+		return upwrap(cs, UTF8);
+	}
+	
 
   /**
    * Allocate a {@link ByteBuf} suitable for IO, preferably a direct buffer./

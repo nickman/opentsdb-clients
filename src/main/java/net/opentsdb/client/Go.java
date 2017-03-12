@@ -16,14 +16,13 @@ import java.io.File;
 import java.util.Collections;
 import java.util.concurrent.ThreadLocalRandom;
 
-import com.codahale.metrics.ConsoleReporter;
 import com.codahale.metrics.MetricFilter;
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Timer.Context;
 
 import net.opentsdb.client.json.JSONOps;
-import net.opentsdb.client.protocol.UnixClient;
+import net.opentsdb.client.protocol.BaseClient;
+import net.opentsdb.client.redis.RedisReporter;
 import net.opentsdb.client.tracing.TraceCodec;
 
 /**
@@ -48,34 +47,44 @@ import net.opentsdb.client.tracing.TraceCodec;
 
 public class Go {
 
-	public static final int LOOPS = 5000;
-	public static final int SWITCH_METRICS_ON = 1000;
-	public static final int TRACES_PER_LOOP = 100;
+	public static final int LOOPS = 50000;
+	public static final int SWITCH_METRICS_ON = 10000;
+	public static final int TRACES_PER_LOOP = 1000;
+	
+		
 	
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
 		log("Test Client");
+		//ClientFactory.relay(new File("./src/test/resources/configs/metrics-relay.conf"));
+		final RedisReporter redReporter = new RedisReporter("localhost", 6379);
+		
 		final ClassLoader cl = Go.class.getClassLoader();
-		final MetricRegistry registry = new MetricRegistry();
 		// /src/test/resources/configs/unix-json.conf
+		int i = -1;
 		try {
 			final ThreadLocalRandom r = ThreadLocalRandom.current();
 			final File[] clientConfigs = new File("./src/test/resources/configs").listFiles();
 //			final File[] clientConfigs = new File[]{new File("./src/test/resources/configs/unix-json.conf")};
 //			final File[] clientConfigs = new File[]{new File("./src/test/resources/configs/unix-text.conf")};
 //			final File[] clientConfigs = new File[]{new File("./src/test/resources/configs/tcp-json.conf")};
-			for(File conf: clientConfigs) {
-				
+//			final File[] clientConfigs = new File[]{new File("./src/test/resources/configs/tcp-text.conf")};
+//			final File[] clientConfigs = new File[]{new File("./src/test/resources/configs/unix-json-text.conf")};			
+//			final File[] clientConfigs = new File[]{new File("./src/test/resources/configs/udp-text.conf")};
+			
+			
+			for(File conf: clientConfigs) {				
 				final ClientConfiguration cc = JSONOps.parseToObject(conf, ClientConfiguration.class);
-				final Timer timer = registry.timer(cc.type());
+				
 				log(cc.type());
 				log("=================================================");
 				System.gc();
-				final UnixClient client = new UnixClient(cc);
+				final BaseClient client = ClientFactory.client(conf);
+				final Timer timer = client.getRegistry().timer("traceTime");
 				try {
-					for(int i = 0; i < LOOPS; i++) {
+					for(i = 0; i < LOOPS; i++) {
 						if(i==SWITCH_METRICS_ON) {
 							client.enableMetrics(true);
 							log("Enabled Metrics");
@@ -85,24 +94,28 @@ public class Go {
 							client.trace("super", Math.abs(r.nextInt(999999)), Collections.singletonMap("loop", ""+x));						
 						}
 						ctx.close();
-						//log("Flushing " + client.getCurrentBatchSize() + " datapoints.");
 						client.flush();
+						//log("Flushing " + client.getCurrentBatchSize() + " datapoints.");
+						if(client.areMetricsEnabled()) {
+//							client.requestStats();
+							
+						}
+						
 	//					if(i%3==0) JSONOps.generatorCacheClean();
 						
 					}
 					
 					log("Client Stats");
 					client.printStats();
-					log("Loop Stats:");
-					ConsoleReporter.forRegistry(registry).build().report();
 					client.close();
 					if(cc.encoding()==TraceCodec.JSON) {
 						log(JSONOps.generatorCacheStats());
 						JSONOps.clearCache();
 					}
-					registry.removeMatching(MetricFilter.ALL);
+					redReporter.report(cc.type(), client.getRegistry());
+					client.getRegistry().removeMatching(MetricFilter.ALL);
 					System.gc();
-					log("================  Complete [" + cc.type() + "]  =====================\n\n");
+					log("================  Complete [" + cc.type() + "]  =====================\n\n********************\n********************");
 				} finally {
 					try { client.close(); } catch (Exception x) {/* No Op */}
 				}
@@ -110,7 +123,11 @@ public class Go {
 			
 //			System.exit(0);
 		} catch (Exception ex) {
+			System.err.println("Error in Loop#" + i);
 			ex.printStackTrace(System.err);
+		} finally {
+			redReporter.close();
+//			ClientFactory.terminateRelays();
 		}
 
 	}

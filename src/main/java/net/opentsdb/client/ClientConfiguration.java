@@ -12,9 +12,12 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.client;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
@@ -28,8 +31,8 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import io.netty.channel.epoll.Epoll;
-import io.netty.channel.unix.DomainSocketAddress;
 import net.opentsdb.client.json.JSONOps;
+import net.opentsdb.client.protocol.BaseClient;
 import net.opentsdb.client.tracing.TraceCodec;
 
 /**
@@ -48,6 +51,8 @@ public class ClientConfiguration {
 	protected final boolean directBuffers;
 	/** Indicates if we're using pooled buffers (true) or unpooled buffers (false) */
 	protected final boolean pooledBuffers;
+	/** Indicates if all calls to the OpenTSDB server should be async */
+	protected final boolean async;
 	/** The initial size of the trace buffer in bytes */
 	protected final int traceBufferSize;
 	/** The data point encoding */
@@ -60,32 +65,44 @@ public class ClientConfiguration {
 	protected final SocketAddress address;
 	/** Indicates if epoll is disabled even if running on a supported platform */
 	protected final boolean disableEpoll;
+	/** Custom configuration elements */
+	protected final Map<String, Object> customElements;
 	
 	
 	public static void main(String[] args) {
-		final ClientConfiguration cc = new ClientConfiguration(true, true, true, 1024,
-				TraceCodec.JSON, Protocol.TCP, true, new InetSocketAddress("localhost", 4242), false);
-		String jsonText = JSONOps.serializeToString(cc);
-		System.out.println(jsonText);
-		System.out.println("======================================================================");
-		final ClientConfiguration cc2 = JSONOps.parseToObject(jsonText, ClientConfiguration.class);
-		System.out.println(cc2);
-		InetSocketAddress isa = (InetSocketAddress)cc2.address;
-		System.out.println("ISA: host:" + isa.getHostName() + ", port:" + isa.getPort() + ", address:" + isa.getAddress() + ", resolved:" + !isa.isUnresolved());
-		System.out.println("======================================================================");
-		final ClientConfiguration uc = new ClientConfiguration(true, true, true, 1024,
-				TraceCodec.JSON, Protocol.UNIX, true, new DomainSocketAddress("/tmp/opentsdb.sock"), false);
-		jsonText = JSONOps.serializeToString(uc);
-		System.out.println(jsonText);
-		System.out.println("======================================================================");
-		final ClientConfiguration uc2 = JSONOps.parseToObject(jsonText, ClientConfiguration.class);
-		System.out.println(uc2);
+//		final ClientConfiguration cc = new ClientConfiguration(true, true, true, 1024,
+//				TraceCodec.JSON, Protocol.TCP, true, new InetSocketAddress("localhost", 4242), false);
+//		String jsonText = JSONOps.serializeToString(cc);
+//		System.out.println(jsonText);
+//		System.out.println("======================================================================");
+//		final ClientConfiguration cc2 = JSONOps.parseToObject(jsonText, ClientConfiguration.class);
+//		System.out.println(cc2);
+//		InetSocketAddress isa = (InetSocketAddress)cc2.address;
+//		System.out.println("ISA: host:" + isa.getHostName() + ", port:" + isa.getPort() + ", address:" + isa.getAddress() + ", resolved:" + !isa.isUnresolved());
+//		System.out.println("======================================================================");
+//		final ClientConfiguration uc = new ClientConfiguration(true, true, true, 1024,
+//				TraceCodec.JSON, Protocol.UNIX, true, new DomainSocketAddress("/tmp/opentsdb.sock"), false);
+//		jsonText = JSONOps.serializeToString(uc);
+//		System.out.println(jsonText);
+//		System.out.println("======================================================================");
+//		final ClientConfiguration uc2 = JSONOps.parseToObject(jsonText, ClientConfiguration.class);
+//		System.out.println(uc2);
+		final ClientConfiguration cc5 = JSONOps.parseToObject(new File("./src/test/resources/configs/metrics-relay.conf"), ClientConfiguration.class);
+		final Object obj = cc5.customElements.get("freq");
+		if(obj==null) {
+			System.out.println("freq was null");
+		} else {
+			System.out.println("freq: [" + obj.getClass().getName() + "]:[" + obj + "]");
+		}
+		final long v = cc5.custom("freqx", Number.class, 4500).longValue();
+		System.out.println("freqx: " + v);
 		
 	}
 
 	
-	public ClientConfiguration(final boolean msTime, final boolean directBuffers, final boolean pooledBuffers, final int traceBufferSize,
+	public ClientConfiguration(final boolean async, final boolean msTime, final boolean directBuffers, final boolean pooledBuffers, final int traceBufferSize,
 			final TraceCodec encoding, final Protocol protocol, final boolean gzip, final SocketAddress address, final boolean disableEpoll) {
+		this.async = async;
 		this.msTime = msTime;
 		this.directBuffers = directBuffers;
 		this.pooledBuffers = pooledBuffers;
@@ -95,6 +112,7 @@ public class ClientConfiguration {
 		this.gzip = gzip;
 		this.address = address;
 		this.disableEpoll = disableEpoll;
+		customElements = new HashMap<String, Object>();
 		validate();
 	}
 	
@@ -102,6 +120,10 @@ public class ClientConfiguration {
 		
 	}
 
+	
+	public boolean async() {
+		return async;
+	}
 
 	public boolean msTime() {
 		return msTime;
@@ -149,6 +171,26 @@ public class ClientConfiguration {
 		return address;
 	}
 	
+	public <T> T custom(final String key, final Class<T> type, final T defaultValue) {
+		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
+		if(type==null) throw new IllegalArgumentException("The passed type was null");
+		try {
+			@SuppressWarnings("unchecked")
+			final T t = (T)customElements.get(key.trim());
+			if(t==null) return defaultValue;
+			return t;
+		} catch (Exception ex) {
+			return defaultValue;
+		}
+	}
+	
+	public void putCustom(final String key, final Object value) {
+		if(key==null || key.trim().isEmpty()) throw new IllegalArgumentException("The passed key was null or empty");
+		if(value==null) throw new IllegalArgumentException("The passed value was null");
+		customElements.put(key.trim(), value);
+	}
+
+	
 	public String type() {
 		return new StringBuilder(protocol.name()).append("/")
 			.append(protocol.channelClass(this).getSimpleName()).append("/")
@@ -171,6 +213,7 @@ public class ClientConfiguration {
 			gen.writeStringField("protocol", value.protocol.name());
 			gen.writeStringField("address", value.address.toString());
 			gen.writeBooleanField("disableepoll", value.disableEpoll);
+			gen.writeObjectField("custom", value.customElements);
 			gen.writeEndObject();			
 		}
 	}
@@ -188,7 +231,8 @@ public class ClientConfiguration {
 			Protocol protocol = Protocol.TCP;
 			boolean gzip = true;
 			boolean disableEpoll = false;
-			SocketAddress address = DEFAULT_SOCKET_ADDRESS;
+			boolean async = true;
+			SocketAddress address = DEFAULT_SOCKET_ADDRESS;			
 			if(node.has("mstime")) msTime = node.get("mstime").booleanValue();
 			if(node.has("directbuffers")) directBuffers = node.get("directbuffers").booleanValue();
 			if(node.has("pooledbuffers")) pooledBuffers = node.get("pooledbuffers").booleanValue();
@@ -198,7 +242,13 @@ public class ClientConfiguration {
 			if(node.has("protocol")) protocol = Protocol.valueOf(node.get("protocol").textValue().trim().toUpperCase());
 			if(node.has("address")) address = protocol.fromString(node.get("address").textValue());
 			if(node.has("disableepoll")) disableEpoll = node.get("disableepoll").booleanValue();
-			return new ClientConfiguration(msTime, directBuffers, pooledBuffers, traceBufferSize, encoding, protocol, gzip, address, disableEpoll);
+			if(node.has("async")) disableEpoll = node.get("async").booleanValue();
+			final ClientConfiguration cc = new ClientConfiguration(async, msTime, directBuffers, pooledBuffers, traceBufferSize, encoding, protocol, gzip, address, disableEpoll);
+			if(node.has("custom")) {
+				cc.customElements.putAll(JSONOps.parseToObject(node.get("custom"), JSONOps.TR_STR_OBJ_HASH_MAP));
+				
+			}
+			return cc;
 		}
 	}
 

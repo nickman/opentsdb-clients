@@ -15,7 +15,6 @@ package net.opentsdb.client;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
@@ -37,6 +36,11 @@ import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpContentDecompressor;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.string.StringDecoder;
+import net.opentsdb.client.protocol.BaseClient;
+import net.opentsdb.client.protocol.ClientBuilder;
+import net.opentsdb.client.protocol.TCPClient;
+import net.opentsdb.client.protocol.UDPClient;
+import net.opentsdb.client.protocol.UnixClient;
 import net.opentsdb.client.tracing.TraceCodec;
 
 /**
@@ -61,10 +65,18 @@ public enum Protocol implements ClientBuilder {
 	final ClientBuilder builder;
 	public final boolean requiresEpoll;
 	
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.client.protocol.ClientBuilder#newClient(net.opentsdb.client.ClientConfiguration)
+	 */
+	@Override
+	public BaseClient newClient(final ClientConfiguration config) {		
+		return builder.newClient(config);
+	}
 	
 	/**
 	 * {@inheritDoc}
-	 * @see net.opentsdb.client.ClientBuilder#fromString(java.lang.String)
+	 * @see net.opentsdb.client.protocol.ClientBuilder#fromString(java.lang.String)
 	 */
 	@Override
 	public SocketAddress fromString(final String address) {
@@ -73,7 +85,7 @@ public enum Protocol implements ClientBuilder {
 	
 	/**
 	 * {@inheritDoc}
-	 * @see net.opentsdb.client.ClientBuilder#channelClass(net.opentsdb.client.ClientConfiguration)
+	 * @see net.opentsdb.client.protocol.ClientBuilder#channelClass(net.opentsdb.client.ClientConfiguration)
 	 */
 	@Override
 	public Class<? extends Channel> channelClass(final ClientConfiguration config) {
@@ -82,7 +94,7 @@ public enum Protocol implements ClientBuilder {
 	
 	/**
 	 * {@inheritDoc}
-	 * @see net.opentsdb.client.ClientBuilder#channelInitializer(net.opentsdb.client.ClientConfiguration, net.opentsdb.client.CallbackHandler)
+	 * @see net.opentsdb.client.protocol.ClientBuilder#channelInitializer(net.opentsdb.client.ClientConfiguration, net.opentsdb.client.CallbackHandler)
 	 */
 	@Override
 	public ChannelInitializer<? extends Channel> channelInitializer(final ClientConfiguration config, final CallbackHandler callbackHandler) {
@@ -91,7 +103,7 @@ public enum Protocol implements ClientBuilder {
 	
 	/**
 	 * {@inheritDoc}
-	 * @see net.opentsdb.client.ClientBuilder#eventLoopGroup(net.opentsdb.client.ClientConfiguration)
+	 * @see net.opentsdb.client.protocol.ClientBuilder#eventLoopGroup(net.opentsdb.client.ClientConfiguration)
 	 */
 	@Override
 	public EventLoopGroup eventLoopGroup(ClientConfiguration config) {		
@@ -101,8 +113,7 @@ public enum Protocol implements ClientBuilder {
 	public abstract static class BaseClientBuilder implements ClientBuilder {
 		static final Charset UTF8 = Charset.forName("UTF8");
 		static final StringDecoder stringDecoder = new StringDecoder(UTF8);
-		ChannelInitializer<? extends Channel> initializer = null;
-		final AtomicBoolean inited = new AtomicBoolean(false);
+		
 		
 		@Override
 		public SocketAddress fromString(final String address) {
@@ -115,31 +126,28 @@ public enum Protocol implements ClientBuilder {
 		
 		@Override
 		public ChannelInitializer<? extends Channel> channelInitializer(final ClientConfiguration config, final CallbackHandler callbackHandler) {
-			if(inited.compareAndSet(false, true)) {
-				initializer = new ChannelInitializer<Channel>() {
-					@Override
-					protected void initChannel(final Channel ch) throws Exception {
-						final ChannelPipeline p = ch.pipeline();
-						if(config.encoding()==TraceCodec.JSON) {
-							if(config.gzip) {
-								p.addLast("Compressor", new HttpContentCompressor());
-							}
-							p.addLast("HttpCodec", new HttpClientCodec());
-							p.addLast("Decompressor", new HttpContentDecompressor());
-							p.addLast("Aggregator", new HttpObjectAggregator(1048576));							
-						} else {
-							if(config.gzip) {
-								p.addLast("compressor", new JZlibEncoder(ZlibWrapper.GZIP, 9));
-							} else {
-								p.addLast("passthrough", new ChannelDuplexHandler());
-							}
-							p.addLast("stringdecoder", stringDecoder);
+			return new ChannelInitializer<Channel>() {
+				@Override
+				protected void initChannel(final Channel ch) throws Exception {
+					final ChannelPipeline p = ch.pipeline();
+					if(config.encoding()==TraceCodec.JSON) {
+						if(config.gzip) {
+							p.addLast("Compressor", new HttpContentCompressor());
 						}
-						p.addLast("handler", callbackHandler.traceCodec().outboundHandler(callbackHandler));
+						p.addLast("HttpCodec", new HttpClientCodec());
+						p.addLast("Decompressor", new HttpContentDecompressor());
+						p.addLast("Aggregator", new HttpObjectAggregator(1048576));							
+					} else {
+						if(config.gzip) {
+							p.addLast("compressor", new JZlibEncoder(ZlibWrapper.GZIP, 9));
+						} else {
+							p.addLast("passthrough", new ChannelDuplexHandler());
+						}
+						p.addLast("stringdecoder", stringDecoder);
 					}
-				};
-			}
-			return initializer;
+					p.addLast("handler", callbackHandler.traceCodec().outboundHandler(callbackHandler));
+				}
+			};
 		}
 		
 		@Override
@@ -161,6 +169,11 @@ public enum Protocol implements ClientBuilder {
 				return NioSocketChannel.class;
 			}
 		}
+		@Override
+		public TCPClient newClient(final ClientConfiguration config) {
+			return new TCPClient(config);
+		}
+		
 	}
 
 	public static class UDPClientBuilder extends BaseClientBuilder {
@@ -171,7 +184,25 @@ public enum Protocol implements ClientBuilder {
 			} else {
 				return NioDatagramChannel.class;
 			}
-		}		
+		}
+		
+		@Override
+		public UDPClient newClient(final ClientConfiguration config) {
+			return new UDPClient(config);
+		}
+		
+		@Override
+		public ChannelInitializer<? extends Channel> channelInitializer(final ClientConfiguration config, final CallbackHandler callbackHandler) {
+			return new ChannelInitializer<Channel>() {
+				@Override
+				protected void initChannel(final Channel ch) throws Exception {
+					final ChannelPipeline p = ch.pipeline();					
+					p.addLast("handler", callbackHandler.traceCodec().outboundHandler(callbackHandler));
+					
+				}
+			};
+		}
+		
 	}
 	
 	
@@ -189,6 +220,11 @@ public enum Protocol implements ClientBuilder {
 			}
 			return EpollDomainSocketChannel.class;
 		}	
+		@Override
+		public UnixClient newClient(final ClientConfiguration config) {
+			return new UnixClient(config);
+		}
+		
 	}
 	
 }

@@ -10,31 +10,26 @@
 // General Public License for more details.  You should have received a copy
 // of the GNU Lesser General Public License along with this program.  If not,
 // see <http://www.gnu.org/licenses/>.
-package net.opentsdb.client;
+package net.opentsdb.client.protocol;
 
-import java.net.SocketAddress;
-
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.EventLoopGroup;
+import net.opentsdb.client.ClientConfiguration;
 
 /**
- * <p>Title: ClientBuilder</p>
- * <p>Description: </p> 
+ * <p>Title: TCPClient</p>
+ * <p>Description: TCP base client implementation</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>net.opentsdb.client.ClientBuilder</code></p>
+ * <p><code>net.opentsdb.client.protocol.TCPClient</code></p>
  */
 
-public interface ClientBuilder {
+public class TCPClient extends BaseClient<TCPClient> {
 
-	public SocketAddress fromString(String address);
-	
-	public EventLoopGroup eventLoopGroup(final ClientConfiguration config);
-	
-	public Class<? extends Channel> channelClass(final ClientConfiguration config);
-	
-	public ChannelInitializer<? extends Channel> channelInitializer(final ClientConfiguration config, final CallbackHandler callbackHandler);
-	
-	
+	/**
+	 * Creates a new TCPClient
+	 * @param clientConfiguration
+	 */
+	public TCPClient(ClientConfiguration clientConfiguration) {
+		super(clientConfiguration);
+	}
+
 }

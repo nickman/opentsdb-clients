@@ -12,21 +12,33 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.client.protocol;
 
+import java.net.SocketAddress;
+
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
+import net.opentsdb.client.CallbackHandler;
 import net.opentsdb.client.ClientConfiguration;
 
 /**
- * <p>Title: UnixClient</p>
- * <p>Description: Unix socket client</p> 
+ * <p>Title: ClientBuilder</p>
+ * <p>Description: </p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
- * <p><code>net.opentsdb.client.protocol.UnixClient</code></p>
+ * <p><code>net.opentsdb.client.ClientBuilder</code></p>
  */
 
-public class UnixClient extends BaseClient<UnixClient> {
+public interface ClientBuilder {
 
-	public UnixClient(final ClientConfiguration clientConfiguration) {
-		super(clientConfiguration);		
-	}
-
-
+	public SocketAddress fromString(String address);
+	
+	public EventLoopGroup eventLoopGroup(final ClientConfiguration config);
+	
+	public Class<? extends Channel> channelClass(final ClientConfiguration config);
+	
+	public ChannelInitializer<? extends Channel> channelInitializer(final ClientConfiguration config, final CallbackHandler callbackHandler);
+	
+	public BaseClient newClient(final ClientConfiguration config);
+	
+	
 }

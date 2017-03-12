@@ -74,9 +74,6 @@
         <configuration>          
           <downloadJavadocs>true</downloadJavadocs>
           <downloadSources>true</downloadSources>
-            <sourceExcludes>
-              <sourceExclude>net/opentsdb/tsd/client/**</sourceExclude>
-            </sourceExcludes>          
         </configuration>
       </plugin>
 
@@ -85,6 +82,8 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>${compiler-plugin.version}</version>
         <configuration>
+          <source>${project.source}</source>
+          <target>${project.source.target}</target>
         </configuration>
       </plugin>
 
@@ -169,7 +168,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <minimizeJar>true</minimizeJar>
+              <minimizeJar>false</minimizeJar>
               <artifactSet>
                 <includes>
                     <include>*:*</include>
