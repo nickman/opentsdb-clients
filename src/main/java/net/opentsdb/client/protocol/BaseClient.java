@@ -385,6 +385,7 @@ public abstract class BaseClient<T extends BaseClient<T>> implements Tracer, Cal
 			public void run() {
 				try {
 					codec.encode(output, time, cleanMetric(metric), value, cleanTags(tags));
+					totalDatapointsSent.increment();
 				} catch (IllegalArgumentException iae) {
 					invalidTraceCounter.inc();
 					log.debug("Invalid trace: {}:{}", metric, tags);
@@ -405,6 +406,7 @@ public abstract class BaseClient<T extends BaseClient<T>> implements Tracer, Cal
 			public void run() {
 				try {
 					codec.encode(output, time, cleanMetric(metric), value, cleanTags(tags));
+					totalDatapointsSent.increment();
 				} catch (IllegalArgumentException iae) {
 					invalidTraceCounter.inc();
 					log.debug("Invalid trace: {}:{}", metric, tags);

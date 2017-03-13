@@ -197,6 +197,7 @@ public class UDPClient extends BaseClient<UDPClient> {
 					} else {
 						output.write(encoded);
 					}
+					totalDatapointsSent.increment();
 				} catch (Exception ex) {
 					throw new RuntimeException("Failed to write pre-encode long value", ex);
 				}
@@ -233,6 +234,7 @@ public class UDPClient extends BaseClient<UDPClient> {
 					} else {
 						output.write(encoded);
 					}
+					totalDatapointsSent.increment();
 				} catch (Exception ex) {
 					throw new RuntimeException("Failed to write pre-encode double value", ex);
 				}
